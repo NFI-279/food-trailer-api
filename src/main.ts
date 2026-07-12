@@ -5,19 +5,19 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   
-  // Use the env variable!
+  // Convert a comma-separated string into an array of allowed URLs
   const allowedOrigins = process.env.FRONTEND_URL 
     ? process.env.FRONTEND_URL.split(',') 
     : ['http://localhost:3000'];
 
   app.enableCors({
-    origin: frontendUrl,
+    origin: allowedOrigins, // <-- This is what was causing the error!
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });
 
   const port = process.env.PORT || 3001;
   await app.listen(port);
-  console.log(`Backend is running on: http://localhost:${port}`);
+  console.log(`Backend is running on port: ${port}`);
 }
 bootstrap();
