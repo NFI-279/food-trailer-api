@@ -37,4 +37,10 @@ export class OrdersController {
   revertOrder(@Param('id') id: string) {
     return this.ordersService.revertOrder(id);
   }
+
+  @Public() // <-- Let customers check their own order!
+  @Get('status/:orderNumber')
+  getStatus(@Param('orderNumber') orderNumber: string) {
+    return this.ordersService.getStatusByOrderNumber(orderNumber);
+  }
 }
