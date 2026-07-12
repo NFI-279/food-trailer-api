@@ -1,0 +1,94 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// -------------------------------------
+// MENU
+// -------------------------------------
+model MenuItem {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  price       Float
+  category    String   // "Grill", "Sides", "Drinks", "Desserts"
+  isAvailable Boolean  @default(true)
+  imageUrl    String?  @default("")
+
+  inventoryItemId   String?        // Optional, because maybe "Apă plată" doesn't need inventory tracking
+  inventoryItem     InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+  inventoryDeduction Float?        @default(1) // How much to deduct per order (e.g., 1 buc)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// -------------------------------------
+// ORDERS
+// -------------------------------------
+model Order {
+  id          String      @id @default(uuid())
+  orderNumber String      @unique // e.g., "101", "102"
+  totalAmount Float
+  status      String      @default("ACTIVE") // "ACTIVE" or "COMPLETED"
+  items       OrderItem[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+// Related table for the items inside an order
+model OrderItem {
+  id        String  @id @default(uuid())
+  name      String  // We copy the name here so old receipts don't change if the menu changes!
+  quantity  Int
+  notes     String? // e.g., "Fără muștar"
+  
+  // Relationship back to the Order
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+// -------------------------------------
+// INVENTORY
+// -------------------------------------
+model InventoryItem {
+  id                String   @id @default(uuid())
+  name              String
+  unit              String   // "kg", "buc", "litri", "porții"
+  currentStock      Float    // Float so we can do 1.5 kg
+  lowStockThreshold Float
+
+  menuItems         MenuItem[]
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// -------------------------------------
+// SETTINGS (Singleton Pattern)
+// -------------------------------------
+model Settings {
+  id                String   @id @default("GLOBAL") // Always "GLOBAL", forces only 1 row
+  isAcceptingOrders Boolean  @default(true)         // The Kill Switch
+  openTime          String   @default("22:00")      // HH:mm format
+  closeTime         String   @default("04:00")
+  overrideOpen      Boolean  @default(false)        // Stay open late for events
+
+  muteKitchenDing   Boolean  @default(false)
+  
+  updatedAt         DateTime @updatedAt
+}
+
+// -------------------------------------
+// USERS (For Authentication)
+// -------------------------------------
+model User {
+  id       String @id @default(uuid())
+  username String @unique
+  password String // This will be hashed, NEVER plain text!
+}
