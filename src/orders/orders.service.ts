@@ -158,4 +158,19 @@ export class OrdersService {
       data: { status: 'ACTIVE' },
     });
   }
+
+  // 6. Check order status (Public for customers)
+  async getStatusByOrderNumber(orderNumber: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { orderNumber },
+      // SECURITY: We only select specific fields so we don't accidentally leak data!
+      select: { orderNumber: true, status: true, totalAmount: true } 
+    });
+
+    if (!order) {
+      throw new NotFoundException(`Order #${orderNumber} not found`);
+    }
+
+    return order;
+  }
 }
