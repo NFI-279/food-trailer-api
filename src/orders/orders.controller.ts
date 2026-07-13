@@ -50,6 +50,16 @@ export class OrdersController {
     return this.ordersService.revertOrder(id);
   }
 
+  @Get('unpaid')
+  findUnpaid() {
+    return this.ordersService.findUnpaid();
+  }
+
+  @Patch(':id/pay')
+  markPaid(@Param('id') id: string) {
+    return this.ordersService.markPaid(id);
+  }
+
   @Public() // <-- Let customers check their own order!
   @Get('status/:orderNumber')
   getStatus(@Param('orderNumber') orderNumber: string) {
