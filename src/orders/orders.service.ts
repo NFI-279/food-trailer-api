@@ -33,15 +33,25 @@ export class OrdersService {
       }
     }
 
-    // --- 2. PRE-FLIGHT INVENTORY CHECK ---
+    // --- 2. PRE-FLIGHT INVENTORY & PRICE CHECK ---
     const inventoryNeeded = new Map<string, { invName: string; amountNeeded: number; amountInStock: number }>();
+    
+    let secureTotalAmount = 0; // SECURITY: We will calculate the real total here!
+
     for (const item of createOrderDto.items) {
       const menuItem = await this.prisma.menuItem.findFirst({
         where: { name: item.name },
         include: { inventoryItem: true },
       });
 
-      if (menuItem && menuItem.inventoryItemId && menuItem.inventoryItem && menuItem.inventoryDeduction) {
+      if (!menuItem) {
+        throw new BadRequestException(`Item ${item.name} does not exist on our menu.`);
+      }
+
+      // Do the math using our secure database price!
+      secureTotalAmount += (menuItem.price * item.quantity);
+
+      if (menuItem.inventoryItemId && menuItem.inventoryItem && menuItem.inventoryDeduction) {
         const deduction = item.quantity * menuItem.inventoryDeduction;
         const invId = menuItem.inventoryItemId;
 
@@ -57,6 +67,7 @@ export class OrdersService {
       }
     }
 
+    // Verify stock
     for (const [invId, data] of inventoryNeeded.entries()) {
       if (data.amountInStock < data.amountNeeded) {
         throw new BadRequestException(`Not enough stock for ${data.invName}!`);
