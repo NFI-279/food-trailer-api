@@ -68,11 +68,9 @@ export class OrdersController {
 
   @Public()
   @Post(':id/checkout')
-  createCheckoutSession(
-    @Param('id') id: string,
-    @Body('customerAppUrl') customerAppUrl: string,
-  ) {
-    return this.ordersService.createStripeCheckout(id, customerAppUrl);
+  createCheckoutSession(@Param('id') id: string) {
+    // Only pass the ID!
+    return this.ordersService.createStripeCheckout(id);
   }
 
   @Public()
