@@ -20,6 +20,18 @@ export class OrdersController {
     return this.ordersService.findActive();
   }
 
+  // --- NEW ROUTES ---
+  @Patch(':id/start')
+  startOrder(@Param('id') id: string) {
+    return this.ordersService.startOrder(id);
+  }
+
+  @Public() // Public so the customer app can call it!
+  @Patch(':id/cancel')
+  cancelOrder(@Param('id') id: string) {
+    return this.ordersService.cancelOrder(id);
+  }
+
   // STILL LOCKED (Only Admins can mark as completed)
   @Patch(':id/complete')
   completeOrder(@Param('id') id: string) {
