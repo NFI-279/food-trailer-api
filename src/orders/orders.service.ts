@@ -163,8 +163,8 @@ export class OrdersService {
   async getStatusByOrderNumber(orderNumber: string) {
     const order = await this.prisma.order.findUnique({
       where: { orderNumber },
-      // SECURITY: We only select specific fields so we don't accidentally leak data!
-      select: { orderNumber: true, status: true, totalAmount: true } 
+      // Add updatedAt: true so the customer app knows exactly when it was finished!
+      select: { orderNumber: true, status: true, totalAmount: true, updatedAt: true } 
     });
 
     if (!order) {
