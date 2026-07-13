@@ -214,7 +214,8 @@ export class OrdersService {
   // --- STRIPE INTEGRATION ---
 
   // 1. Generate the Stripe Checkout URL
-  async createStripeCheckout(orderId: string, customerAppUrl: string) {
+ // Removed the customerAppUrl parameter from the function!
+  async createStripeCheckout(orderId: string) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: { items: true },
@@ -222,12 +223,8 @@ export class OrdersService {
 
     if (!order) throw new NotFoundException('Order not found');
 
-    // Convert our database items into Stripe's format
     const lineItems = order.items.map((item) => {
-      // Find the price by dividing total by quantity (simple math since we don't store individual prices in the order items table)
-      // In a real app, you'd store the unit price, but this works perfectly for our total!
       const unitAmount = Math.round((order.totalAmount / order.items.reduce((sum, i) => sum + i.quantity, 0)) * 100); 
-
       return {
         price_data: {
           currency: 'ron',
@@ -235,22 +232,23 @@ export class OrdersService {
             name: item.name,
             description: item.notes || 'No notes',
           },
-          unit_amount: unitAmount, // Stripe expects amounts in BANI (cents), so 35 RON = 3500
+          unit_amount: unitAmount,
         },
         quantity: item.quantity,
       };
     });
 
-    // Create the session
+    // SECURITY: Use the trusted environment variable, fallback to localhost for dev!
+    const redirectUrl = process.env.CUSTOMER_URL || 'http://localhost:3000';
+
     const session = await this.stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: lineItems,
       mode: 'payment',
-      // We attach the Order ID securely in the background!
       metadata: { orderId: order.id },
-      // Where to send the user after they pay (or cancel)
-      success_url: `${customerAppUrl}?success=true`,
-      cancel_url: `${customerAppUrl}?canceled=true`,
+      // SECURITY: Safe backend redirects!
+      success_url: `${redirectUrl}?success=true`,
+      cancel_url: `${redirectUrl}?canceled=true`,
     });
 
     return { url: session.url };
