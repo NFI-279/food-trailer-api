@@ -69,9 +69,10 @@ export class OrdersService {
     // --- 4. SAVE ORDER AS PENDING ---
     const order = await this.prisma.order.create({
       data: {
-        orderNumber: generatedOrderNumber, // Use the backend-generated number!
+        orderNumber: generatedOrderNumber,
         totalAmount: createOrderDto.totalAmount,
-        status: 'PENDING', // NEW STATUS!
+        status: 'UNPAID', // Start as UNPAID to protect the kitchen!
+        paymentMethod: createOrderDto.paymentMethod, // Save how they are paying
         items: {
           create: createOrderDto.items.map(item => ({
             name: item.name,
