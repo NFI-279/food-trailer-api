@@ -27,7 +27,6 @@ export class OrdersController {
     return this.ordersService.startOrder(id);
   }
 
-  @Public() // Public so the customer app can call it!
   @Patch(':id/cancel')
   cancelOrder(@Param('id') id: string) {
     return this.ordersService.cancelOrder(id);
