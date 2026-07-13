@@ -1,8 +1,9 @@
 // [Backend] src/orders/orders.controller.ts
-import { Controller, Get, Post, Body, Patch, Param } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Req, Headers } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
-import { Public } from '../auth/public.decorator'; // <-- 1. Import the VIP Pass!
+import { Public } from '../auth/public.decorator';
+
 
 @Controller('orders')
 export class OrdersController {
@@ -64,5 +65,21 @@ export class OrdersController {
   @Get('status/:orderNumber')
   getStatus(@Param('orderNumber') orderNumber: string) {
     return this.ordersService.getStatusByOrderNumber(orderNumber);
+  }
+
+  @Public()
+  @Post(':id/checkout')
+  createCheckoutSession(
+    @Param('id') id: string,
+    @Body('customerAppUrl') customerAppUrl: string,
+  ) {
+    return this.ordersService.createStripeCheckout(id, customerAppUrl);
+  }
+
+  @Public()
+  @Post('webhook')
+  async stripeWebhook(@Headers('stripe-signature') signature: string, @Req() req: any) {
+    // We must pass the raw unparsed body to Stripe for security validation
+    return this.ordersService.handleStripeWebhook(signature, req.rawBody);
   }
 }

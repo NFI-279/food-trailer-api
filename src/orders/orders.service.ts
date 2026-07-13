@@ -2,10 +2,15 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { PrismaService } from '../prisma/prisma.service';
+import Stripe from 'stripe';
 
 @Injectable()
 export class OrdersService {
   constructor(private prisma: PrismaService) {}
+
+  private stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+    apiVersion: '2026-06-24.dahlia', // Updated to the exact type your package requires!
+  });
 
   async create(createOrderDto: CreateOrderDto) {
     // --- 1. SECURITY & BUSINESS HOURS CHECK ---
@@ -190,5 +195,80 @@ export class OrdersService {
       where: { id },
       data: { status: 'PENDING' }, // Now it shows up in Active Orders!
     });
+  }
+
+  // --- STRIPE INTEGRATION ---
+
+  // 1. Generate the Stripe Checkout URL
+  async createStripeCheckout(orderId: string, customerAppUrl: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
+
+    if (!order) throw new NotFoundException('Order not found');
+
+    // Convert our database items into Stripe's format
+    const lineItems = order.items.map((item) => {
+      // Find the price by dividing total by quantity (simple math since we don't store individual prices in the order items table)
+      // In a real app, you'd store the unit price, but this works perfectly for our total!
+      const unitAmount = Math.round((order.totalAmount / order.items.reduce((sum, i) => sum + i.quantity, 0)) * 100); 
+
+      return {
+        price_data: {
+          currency: 'ron',
+          product_data: {
+            name: item.name,
+            description: item.notes || 'No notes',
+          },
+          unit_amount: unitAmount, // Stripe expects amounts in BANI (cents), so 35 RON = 3500
+        },
+        quantity: item.quantity,
+      };
+    });
+
+    // Create the session
+    const session = await this.stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: lineItems,
+      mode: 'payment',
+      // We attach the Order ID securely in the background!
+      metadata: { orderId: order.id },
+      // Where to send the user after they pay (or cancel)
+      success_url: `${customerAppUrl}?success=true`,
+      cancel_url: `${customerAppUrl}?canceled=true`,
+    });
+
+    return { url: session.url };
+  }
+
+  // 2. The secure background listener
+  async handleStripeWebhook(signature: string, rawBody: Buffer) {
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    let event: Stripe.Event;
+
+    try {
+      // Verify this message ACTUALLY came from Stripe!
+      event = this.stripe.webhooks.constructEvent(rawBody, signature, webhookSecret!);
+    } catch (err: any) {
+      throw new BadRequestException(`Webhook Error: ${err.message}`);
+    }
+
+    // If the payment was successful...
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object as Stripe.Checkout.Session;
+      const orderId = session.metadata?.orderId;
+
+      if (orderId) {
+        // Find the order and mark it PENDING! (This drops it into the kitchen queue!)
+        await this.prisma.order.update({
+          where: { id: orderId },
+          data: { status: 'PENDING' },
+        });
+        console.log(`STRIPE SUCCESS: Order ${orderId} has been paid and sent to kitchen!`);
+      }
+    }
+
+    return { received: true };
   }
 }
