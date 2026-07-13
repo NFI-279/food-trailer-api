@@ -80,6 +80,8 @@ model Settings {
   overrideOpen      Boolean  @default(false)        // Stay open late for events
 
   muteKitchenDing   Boolean  @default(false)
+
+  adminLanguage     String   @default("ro")
   
   updatedAt         DateTime @updatedAt
 }
