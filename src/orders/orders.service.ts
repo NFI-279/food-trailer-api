@@ -1,53 +1,39 @@
-// src/orders/orders.service.ts
+// [Backend] src/orders/orders.service.ts
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { PrismaService } from '../prisma/prisma.service';
-
 
 @Injectable()
 export class OrdersService {
   constructor(private prisma: PrismaService) {}
 
-  // 1. Create a new order (with its nested items)
   async create(createOrderDto: CreateOrderDto) {
     // --- 1. SECURITY & BUSINESS HOURS CHECK ---
     const settings = await this.prisma.settings.findUnique({ where: { id: 'GLOBAL' } });
-    
     if (settings) {
-      if (!settings.isAcceptingOrders) {
-        throw new BadRequestException("The trailer is currently closed. Cannot accept orders.");
-      }
-
+      if (!settings.isAcceptingOrders) throw new BadRequestException("The trailer is currently closed.");
       if (!settings.overrideOpen) {
         const now = new Date();
         const currentHour = now.getHours().toString().padStart(2, '0');
         const currentMinute = now.getMinutes().toString().padStart(2, '0');
         const currentTime = `${currentHour}:${currentMinute}`;
-
         const { openTime, closeTime } = settings;
         let isOpen = false;
-
         if (openTime < closeTime) {
           isOpen = currentTime >= openTime && currentTime <= closeTime;
         } else {
           isOpen = currentTime >= openTime || currentTime <= closeTime;
         }
-
-        if (!isOpen) {
-          throw new BadRequestException(`We are closed. Business hours are ${openTime} to ${closeTime}.`);
-        }
+        if (!isOpen) throw new BadRequestException(`We are closed. Business hours are ${openTime} to ${closeTime}.`);
       }
     }
-    // --- END SECURITY CHECK ---
 
     // --- 2. PRE-FLIGHT INVENTORY CHECK ---
-    // We aggregate the required inventory. (In case multiple menu items use the same inventory!)
     const inventoryNeeded = new Map<string, { invName: string; amountNeeded: number; amountInStock: number }>();
-
     for (const item of createOrderDto.items) {
       const menuItem = await this.prisma.menuItem.findFirst({
         where: { name: item.name },
-        include: { inventoryItem: true }, // We include the linked inventory item so we know the current stock!
+        include: { inventoryItem: true },
       });
 
       if (menuItem && menuItem.inventoryItemId && menuItem.inventoryItem && menuItem.inventoryDeduction) {
@@ -66,23 +52,26 @@ export class OrdersService {
       }
     }
 
-    // Now that we have the totals, verify if we have enough stock!
     for (const [invId, data] of inventoryNeeded.entries()) {
       if (data.amountInStock < data.amountNeeded) {
-        // ABORT ORDER! Throw an error back to the frontend!
-        throw new BadRequestException(
-          `Not enough stock for ${data.invName}! We need ${data.amountNeeded}, but only have ${data.amountInStock} left.`
-        );
+        throw new BadRequestException(`Not enough stock for ${data.invName}!`);
       }
     }
-    // --- END PRE-FLIGHT CHECK ---
 
-    // --- 3. SAVE THE ORDER (Because we know it's safe!) ---
+    // --- 3. GENERATE SEQUENTIAL ORDER NUMBER ---
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const todayCount = await this.prisma.order.count({
+      where: { createdAt: { gte: startOfDay } }
+    });
+    const generatedOrderNumber = (todayCount + 1).toString().padStart(3, '0');
+
+    // --- 4. SAVE ORDER AS PENDING ---
     const order = await this.prisma.order.create({
       data: {
-        orderNumber: createOrderDto.orderNumber,
+        orderNumber: generatedOrderNumber, // Use the backend-generated number!
         totalAmount: createOrderDto.totalAmount,
-        status: 'ACTIVE',
+        status: 'PENDING', // NEW STATUS!
         items: {
           create: createOrderDto.items.map(item => ({
             name: item.name,
@@ -94,83 +83,92 @@ export class OrdersService {
       include: { items: true },
     });
 
-    // --- 4. DEDUCT INVENTORY ---
+    // --- 5. DEDUCT INVENTORY ---
     for (const [invId, data] of inventoryNeeded.entries()) {
       await this.prisma.inventoryItem.update({
         where: { id: invId },
-        data: {
-          currentStock: { decrement: data.amountNeeded },
-        },
+        data: { currentStock: { decrement: data.amountNeeded } },
       });
     }
 
     return order;
   }
 
-  
-
-  // 2. Fetch only ACTIVE orders for the kitchen tablet
+  // Fetch ACTIVE orders (Pending AND Preparing)
   async findActive() {
     return this.prisma.order.findMany({
-      where: { status: 'ACTIVE' },
-      include: { items: true }, // We need the items to display on the card!
-      orderBy: { createdAt: 'asc' }, // Oldest first
+      where: { status: { in: ['PENDING', 'PREPARING'] } },
+      include: { items: true },
+      orderBy: { createdAt: 'asc' },
     });
   }
 
-  // 3. Mark an order as COMPLETED
-  async completeOrder(id: string) {
-    const order = await this.prisma.order.findUnique({ where: { id } });
-    if (!order) {
-      throw new NotFoundException(`Order with ID ${id} not found`);
-    }
+  async getStatusByOrderNumber(orderNumber: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { orderNumber },
+      select: { orderNumber: true, status: true, totalAmount: true, updatedAt: true } 
+    });
+    if (!order) throw new NotFoundException(`Order #${orderNumber} not found`);
+    return order;
+  }
 
+  // --- NEW WORKFLOW FUNCTIONS ---
+
+  async startOrder(id: string) {
+    return this.prisma.order.update({
+      where: { id },
+      data: { status: 'PREPARING' },
+    });
+  }
+
+  async completeOrder(id: string) {
     return this.prisma.order.update({
       where: { id },
       data: { status: 'COMPLETED' },
     });
   }
 
-  // 4. Fetch COMPLETED orders (only for today, newest first)
-  async findCompleted() {
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+  // Customer or Admin cancels order
+  async cancelOrder(id: string) {
+    const order = await this.prisma.order.findUnique({ where: { id }, include: { items: true } });
+    if (!order) throw new NotFoundException('Order not found');
+    
+    // Security: You can only cancel an order if it hasn't been started yet!
+    if (order.status !== 'PENDING') {
+      throw new BadRequestException('Order is already being prepared and cannot be cancelled.');
+    }
 
-    return this.prisma.order.findMany({
-      where: { 
-        status: 'COMPLETED',
-        updatedAt: { gte: startOfDay } // Only show ones completed today
-      },
-      include: { items: true },
-      orderBy: { updatedAt: 'desc' }, // Show most recently completed at the top
-    });
-  }
-
-  // 5. Revert a completed order back to ACTIVE
-  async revertOrder(id: string) {
-    const order = await this.prisma.order.findUnique({ where: { id } });
-    if (!order) {
-      throw new NotFoundException(`Order with ID ${id} not found`);
+    // REFUND INVENTORY
+    for (const item of order.items) {
+      const menuItem = await this.prisma.menuItem.findFirst({ where: { name: item.name } });
+      if (menuItem && menuItem.inventoryItemId && menuItem.inventoryDeduction) {
+        await this.prisma.inventoryItem.update({
+          where: { id: menuItem.inventoryItemId },
+          data: { currentStock: { increment: item.quantity * menuItem.inventoryDeduction } },
+        });
+      }
     }
 
     return this.prisma.order.update({
       where: { id },
-      data: { status: 'ACTIVE' },
+      data: { status: 'CANCELLED' },
     });
   }
 
-  // 6. Check order status (Public for customers)
-  async getStatusByOrderNumber(orderNumber: string) {
-    const order = await this.prisma.order.findUnique({
-      where: { orderNumber },
-      // Add updatedAt: true so the customer app knows exactly when it was finished!
-      select: { orderNumber: true, status: true, totalAmount: true, updatedAt: true } 
+  async findCompleted() {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    return this.prisma.order.findMany({
+      where: { status: 'COMPLETED', updatedAt: { gte: startOfDay } },
+      include: { items: true },
+      orderBy: { updatedAt: 'desc' },
     });
+  }
 
-    if (!order) {
-      throw new NotFoundException(`Order #${orderNumber} not found`);
-    }
-
-    return order;
+  async revertOrder(id: string) {
+    return this.prisma.order.update({
+      where: { id },
+      data: { status: 'PREPARING' },
+    });
   }
 }
