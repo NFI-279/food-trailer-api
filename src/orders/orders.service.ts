@@ -86,7 +86,7 @@ export class OrdersService {
     const order = await this.prisma.order.create({
       data: {
         orderNumber: generatedOrderNumber,
-        totalAmount: createOrderDto.totalAmount,
+        totalAmount: secureTotalAmount,
         status: 'UNPAID', // Start as UNPAID to protect the kitchen!
         paymentMethod: createOrderDto.paymentMethod, // Save how they are paying
         items: {
