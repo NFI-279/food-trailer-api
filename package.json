@@ -38,6 +38,7 @@
     "stripe": "^22.3.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "@nestjs/throttler": "^5.1.2"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
