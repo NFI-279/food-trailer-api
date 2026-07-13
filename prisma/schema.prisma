@@ -35,7 +35,8 @@ model Order {
   id          String      @id @default(uuid())
   orderNumber String      @unique // e.g., "101", "102"
   totalAmount Float
-  status      String      @default("ACTIVE") // "ACTIVE" or "COMPLETED"
+  status        String      @default("UNPAID") // Changed default! (UNPAID, PENDING, PREPARING, COMPLETED, CANCELLED)
+  paymentMethod String      @default("CASH")   // "CASH" or "CARD"
   items       OrderItem[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
