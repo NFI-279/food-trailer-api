@@ -1,5 +1,5 @@
 // src/orders/dto/create-order.dto.ts
-import { IsString, IsNumber, Min, IsOptional, ValidateNested, IsIn, IsArray } from 'class-validator';
+import { IsString, IsNumber, Min, Max, IsOptional, ValidateNested, IsIn, IsArray, ArrayMaxSize } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateOrderItemDto {
@@ -8,6 +8,7 @@ export class CreateOrderItemDto {
 
   @IsNumber()
   @Min(1) // SECURITY: Quantity CANNOT be less than 1!
+  @Max(50)
   quantity!: number;
 
   @IsString()
@@ -21,6 +22,7 @@ export class CreateOrderDto {
   totalAmount!: number; // We still receive it, but we won't trust it!
 
   @IsArray()
+  @ArrayMaxSize(20)
   @ValidateNested({ each: true })
   @Type(() => CreateOrderItemDto)
   items!: CreateOrderItemDto[];
