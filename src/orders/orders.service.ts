@@ -80,7 +80,10 @@ export class OrdersService {
     const todayCount = await this.prisma.order.count({
       where: { createdAt: { gte: startOfDay } }
     });
-    const generatedOrderNumber = (todayCount + 1).toString().padStart(3, '0');
+    
+    // Generate a 2-character random string (e.g., "B4", "X9") to prevent millisecond collisions!
+    const randomSuffix = Math.random().toString(36).substring(2, 4).toUpperCase();
+    const generatedOrderNumber = `${(todayCount + 1).toString().padStart(3, '0')}-${randomSuffix}`;
 
     // --- 4. SAVE ORDER AS PENDING ---
     const order = await this.prisma.order.create({
