@@ -172,4 +172,23 @@ export class OrdersService {
       data: { status: 'PREPARING' },
     });
   }
+
+  async findUnpaid() {
+    return this.prisma.order.findMany({
+      where: { status: 'UNPAID', paymentMethod: 'CASH' },
+      include: { items: true },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  // Cashier clicks "Mark Paid" -> Send to kitchen!
+  async markPaid(id: string) {
+    const order = await this.prisma.order.findUnique({ where: { id } });
+    if (!order) throw new NotFoundException('Order not found');
+
+    return this.prisma.order.update({
+      where: { id },
+      data: { status: 'PENDING' }, // Now it shows up in Active Orders!
+    });
+  }
 }
