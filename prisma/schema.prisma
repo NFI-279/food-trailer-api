@@ -37,6 +37,10 @@ model Order {
   totalAmount Float
   status        String      @default("UNPAID") // Changed default! (UNPAID, PENDING, PREPARING, COMPLETED, CANCELLED)
   paymentMethod String      @default("CASH")   // "CASH" or "CARD"
+
+  stripePaymentId  String?
+
+
   items       OrderItem[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
