@@ -293,4 +293,13 @@ export class OrdersService {
 
     return { received: true };
   }
+
+  async cancelUnpaidOrder(orderNumber: string) {
+    const order = await this.prisma.order.findUnique({ where: { orderNumber } });
+    if (!order || order.status !== 'UNPAID') return { success: false };
+
+    // We can safely reuse our main cancel function!
+    await this.cancelOrder(order.id);
+    return { success: true };
+  }
 }
