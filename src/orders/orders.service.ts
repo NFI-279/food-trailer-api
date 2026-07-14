@@ -154,8 +154,18 @@ export class OrdersService {
     if (!order) throw new NotFoundException('Order not found');
     
     // Security: You can only cancel an order if it hasn't been started yet!
-    if (order.status !== 'PENDING') {
+    if (order.status !== 'PENDING' && order.status !== 'UNPAID') {
       throw new BadRequestException('Order is already being prepared and cannot be cancelled.');
+    }
+
+    // --- NEW: STRIPE REFUND LOGIC ---
+    if (order.paymentMethod === 'CARD' && order.stripePaymentId && order.status === 'PENDING') {
+      try {
+        await this.stripe.refunds.create({ payment_intent: order.stripePaymentId });
+      } catch (err: any) {
+        console.error("Stripe Refund Failed:", err.message);
+        throw new BadRequestException("Failed to issue Stripe refund. Please refund manually in Stripe dashboard.");
+      }
     }
 
     // REFUND INVENTORY
