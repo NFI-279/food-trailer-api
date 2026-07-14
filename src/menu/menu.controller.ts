@@ -3,12 +3,13 @@ import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/commo
 import { MenuService } from './menu.service';
 import { CreateMenuDto } from './dto/create-menu.dto';
 import { Public } from '../auth/public.decorator'; // <-- 1. Import the VIP Pass!
+import { Roles } from '../auth/roles.decorator';
 
 @Controller('menu')
 export class MenuController {
   constructor(private readonly menuService: MenuService) {}
 
-  // STILL LOCKED (Only Admins can create)
+  @Roles('ADMIN')
   @Post()
   create(@Body() createMenuDto: CreateMenuDto) {
     return this.menuService.create(createMenuDto);
@@ -21,19 +22,19 @@ export class MenuController {
     return this.menuService.findAll();
   }
 
-  // STILL LOCKED (Only Admins can toggle)
+  @Roles('ADMIN')
   @Patch(':id/toggle')
   toggleAvailability(@Param('id') id: string) {
     return this.menuService.toggleAvailability(id);
   }
 
-  // STILL LOCKED (Only Admins can update)
+  @Roles('ADMIN'))
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateData: Partial<CreateMenuDto>) {
     return this.menuService.update(id, updateData);
   }
 
-  // STILL LOCKED (Only Admins can delete)
+  @Roles('ADMIN')
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.menuService.remove(id);
