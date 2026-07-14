@@ -2,6 +2,7 @@
 import { Controller, Get, Patch, Body } from '@nestjs/common';
 import { SettingsService } from './settings.service';
 import { Public } from '../auth/public.decorator';
+import { Roles } from '../auth/roles.decorator'; 
 
 @Controller('settings')
 export class SettingsController {
