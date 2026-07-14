@@ -12,6 +12,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { SettingsModule } from './settings/settings.module';
+import { RolesGuard } from './auth/roles.guard';
 
 @Module({
   imports: [
@@ -35,6 +36,10 @@ import { SettingsModule } from './settings/settings.module';
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,   // Bouncer 2: Do you have the right Role?
     },
     // 4. Register the Rate Limiter Guard (Our Anti-Spam Shield)
     {
