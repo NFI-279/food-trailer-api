@@ -28,7 +28,7 @@ export class MenuController {
     return this.menuService.toggleAvailability(id);
   }
 
-  @Roles('ADMIN'))
+  @Roles('ADMIN')
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateData: Partial<CreateMenuDto>) {
     return this.menuService.update(id, updateData);
