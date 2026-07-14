@@ -13,6 +13,7 @@ export class SettingsController {
     return this.settingsService.getSettings();
   }
 
+  @Roles('ADMIN')
   @Patch()
   updateSettings(@Body() updateData: any) {
     return this.settingsService.updateSettings(updateData);
