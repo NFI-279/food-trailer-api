@@ -79,4 +79,10 @@ export class OrdersController {
     // We must pass the raw unparsed body to Stripe for security validation
     return this.ordersService.handleStripeWebhook(signature, req.rawBody);
   }
+
+  @Public()
+  @Patch('cancel-unpaid/:orderNumber')
+  cancelUnpaidOrder(@Param('orderNumber') orderNumber: string) {
+    return this.ordersService.cancelUnpaidOrder(orderNumber);
+  }
 }
