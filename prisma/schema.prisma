@@ -94,4 +94,5 @@ model User {
   id       String @id @default(uuid())
   username String @unique
   password String // This will be hashed, NEVER plain text!
+  role     String @default("ADMIN")
 }
