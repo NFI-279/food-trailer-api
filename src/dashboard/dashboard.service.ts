@@ -7,37 +7,38 @@ export class DashboardService {
   constructor(private prisma: PrismaService) {}
 
   async getStats() {
-    // 1. Get the start of today to filter today's orders
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
-    // 2. Fetch all orders created today
     const todayOrders = await this.prisma.order.findMany({
       where: {
-        createdAt: {
-          gte: startOfDay,
-        },
+        createdAt: { gte: startOfDay },
+        status: { not: 'CANCELLED' } // Don't count cancelled orders!
       },
     });
 
-    // 3. Calculate Revenue & Total Orders
     const ordersToday = todayOrders.length;
-    const revenueToday = todayOrders.reduce((sum, order) => sum + order.totalAmount, 0);
+    
+    // Split the revenue!
+    const revenueCash = todayOrders
+      .filter(o => o.paymentMethod === 'CASH')
+      .reduce((sum, order) => sum + order.totalAmount, 0);
+      
+    const revenueCard = todayOrders
+      .filter(o => o.paymentMethod === 'CARD')
+      .reduce((sum, order) => sum + order.totalAmount, 0);
 
-    // 4. Count Active Orders
     const activeOrders = await this.prisma.order.count({
-      where: { status: 'ACTIVE' },
+      where: { status: { in: ['PENDING', 'PREPARING'] } },
     });
 
-    // 5. Count Low Stock Items
-    // (We fetch them and compare currentStock to threshold)
     const inventory = await this.prisma.inventoryItem.findMany();
-    const lowStockItems = inventory.filter(
-      (item) => item.currentStock <= item.lowStockThreshold
-    ).length;
+    const lowStockItems = inventory.filter(item => item.currentStock <= item.lowStockThreshold).length;
 
     return {
-      revenueToday,
+      revenueToday: revenueCash + revenueCard, // Total
+      revenueCash, // New!
+      revenueCard, // New!
       ordersToday,
       activeOrders,
       lowStockItems,
