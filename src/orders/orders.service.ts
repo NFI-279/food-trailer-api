@@ -270,14 +270,14 @@ export class OrdersService {
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object as Stripe.Checkout.Session;
       const orderId = session.metadata?.orderId;
+      const paymentIntentId = session.payment_intent as string;
 
       if (orderId) {
         // Find the order and mark it PENDING! (This drops it into the kitchen queue!)
         await this.prisma.order.update({
           where: { id: orderId },
-          data: { status: 'PENDING' },
+          data: { status: 'PENDING', stripePaymentId: paymentIntentId },
         });
-        console.log(`STRIPE SUCCESS: Order ${orderId} has been paid and sent to kitchen!`);
       }
     }
 
