@@ -87,7 +87,7 @@ export class OrdersService {
           paymentMethod: createOrderDto.paymentMethod,
           items: {
             create: createOrderDto.items.map(item => ({
-              name: item.name, quantity: item.quantity, notes: item.notes,
+              name: item.name, quantity: item.quantity,
             })),
           },
         },

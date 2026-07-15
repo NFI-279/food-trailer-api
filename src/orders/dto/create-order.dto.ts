@@ -1,5 +1,5 @@
-// src/orders/dto/create-order.dto.ts
-import { IsString, IsNumber, Min, Max, IsOptional, ValidateNested, IsIn, IsArray, ArrayMaxSize } from 'class-validator';
+// [Backend] src/orders/dto/create-order.dto.ts
+import { IsString, IsNumber, Min, Max, ValidateNested, IsIn, IsArray, ArrayMaxSize } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateOrderItemDto {
@@ -7,27 +7,23 @@ export class CreateOrderItemDto {
   name!: string;
 
   @IsNumber()
-  @Min(1) // SECURITY: Quantity CANNOT be less than 1!
-  @Max(50)
+  @Min(1)
+  @Max(50) // SECURITY: No one can order more than 50 of a single item!
   quantity!: number;
-
-  @IsString()
-  @IsOptional()
-  notes?: string;
 }
 
 export class CreateOrderDto {
   @IsNumber()
   @Min(0)
-  totalAmount!: number; // We still receive it, but we won't trust it!
+  totalAmount!: number;
 
   @IsArray()
-  @ArrayMaxSize(20)
+  @ArrayMaxSize(20) // SECURITY: No one can have more than 20 different items in one cart!
   @ValidateNested({ each: true })
   @Type(() => CreateOrderItemDto)
   items!: CreateOrderItemDto[];
 
   @IsString()
-  @IsIn(['CASH', 'CARD']) // SECURITY: Can only be these two words!
+  @IsIn(['CASH', 'CARD'])
   paymentMethod!: string;
 }
