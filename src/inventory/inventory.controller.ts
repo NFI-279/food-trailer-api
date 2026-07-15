@@ -31,4 +31,10 @@ export class InventoryController {
   remove(@Param('id') id: string) {
     return this.inventoryService.remove(id);
   }
+
+  @Roles('ADMIN')
+  @Patch(':id/adjust')
+  adjustStock(@Param('id') id: string, @Body('delta') delta: number) {
+    return this.inventoryService.adjustStock(id, delta);
+  }
 }
