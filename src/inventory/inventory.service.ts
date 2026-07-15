@@ -1,5 +1,5 @@
 // src/inventory/inventory.service.ts
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, , BadRequestException  } from '@nestjs/common';
 import { CreateInventoryDto } from './dto/create-inventory.dto';
 import { PrismaService } from '../prisma/prisma.service';
 
