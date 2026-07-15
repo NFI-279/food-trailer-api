@@ -6,11 +6,23 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
 
-  // THE SILVER BULLET CORS FIX:
-  // "origin: true" tells NestJS to dynamically reflect the request's origin back to it.
-  // This completely eliminates typo issues in Render environment variables!
+  // 1. Read the production URLs from Render's Environment Variables
+  const allowedOrigins = process.env.FRONTEND_URL 
+    ? process.env.FRONTEND_URL.split(',').map(url => url.trim()) 
+    : [];
+
+  // 2. SECURITY: Only allow localhost if the server is NOT in production!
+  if (process.env.NODE_ENV !== 'production') {
+    allowedOrigins.push(
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:3002'
+    );
+  }
+
+  // 3. Lock down CORS
   app.enableCors({
-    origin: true, 
+    origin: allowedOrigins,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
   });

@@ -1,32 +1,16 @@
 // src/auth/auth.service.ts
-import { Injectable, UnauthorizedException, OnModuleInit } from '@nestjs/common';
+import { Injectable, UnauthorizedException} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
 
 @Injectable()
-export class AuthService implements OnModuleInit{
+export class AuthService{
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
   ) {}
 
-   // --- ADD THIS BLOCK BACK IN ---
-  async onModuleInit() {
-    const existingAdmin = await this.prisma.user.findUnique({ where: { username: 'admin' } });
-    if (!existingAdmin) {
-      const hashedPassword = await bcrypt.hash('foodtrailer2026', 10);
-      await this.prisma.user.create({
-        data: {
-          username: 'admin',
-          password: hashedPassword,
-          role: 'ADMIN'
-        },
-      });
-      console.log('✅ Admin account seeded!');
-    }
-  }
-  // ------------------------------
 
   async login(username: string, pass: string) {
     // 1. Find the user
