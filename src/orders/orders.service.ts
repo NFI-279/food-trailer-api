@@ -211,8 +211,8 @@ export class OrdersService {
       line_items: lineItems,
       mode: 'payment',
       metadata: { orderId: order.id },
-      success_url: `${redirectUrl}?success=true`,
-      cancel_url: `${redirectUrl}?canceled=true`,
+      success_url: `${redirectUrl}?success=true&orderId=${order.id}`,
+      cancel_url: `${redirectUrl}?canceled=true&orderId=${order.id}`,
     });
 
     // Save the URL so they can't generate it again!
