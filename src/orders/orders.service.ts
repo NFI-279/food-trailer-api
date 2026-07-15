@@ -103,8 +103,12 @@ export class OrdersService {
     return this.prisma.order.findMany({ where: { status: 'COMPLETED', updatedAt: { gte: startOfDay } }, include: { items: true }, orderBy: { updatedAt: 'desc' } });
   }
 
-  async getStatusByOrderNumber(orderNumber: string) {
-    const order = await this.prisma.order.findUnique({ where: { orderNumber }, select: { orderNumber: true, status: true, totalAmount: true, updatedAt: true } });
+  // SECURITY FIX: Fetch by unguessable UUID instead of Order Number!
+  async getStatusById(id: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      select: { id: true, orderNumber: true, status: true, totalAmount: true, updatedAt: true } 
+    });
     if (!order) throw new NotFoundException('Order not found');
     return order;
   }
@@ -112,9 +116,13 @@ export class OrdersService {
   // --- STRICT STATE MACHINE WORKFLOW ---
 
   async markPaid(id: string) {
-    const order = await this.prisma.order.findUnique({ where: { id } });
-    if (order?.status !== 'UNPAID') throw new ConflictException('Order is not in UNPAID state.');
-    return this.prisma.order.update({ where: { id }, data: { status: 'PENDING' } });
+    // SECURITY FIX: Atomic update verifying it's currently UNPAID and CASH!
+    const result = await this.prisma.order.updateMany({
+      where: { id, status: 'UNPAID', paymentMethod: 'CASH' },
+      data: { status: 'PENDING' },
+    });
+    if (result.count === 0) throw new ConflictException('Order cannot be marked paid. It may not be a Cash order or is not UNPAID.');
+    return { success: true };
   }
 
   async startOrder(id: string) {
@@ -136,18 +144,19 @@ export class OrdersService {
   }
 
   async cancelOrder(id: string) {
-    return this.prisma.$transaction(async (tx) => {
-      const order = await tx.order.findUnique({ where: { id }, include: { items: true } });
-      if (!order) throw new NotFoundException('Order not found');
-      if (order.status !== 'PENDING' && order.status !== 'UNPAID') throw new ConflictException('Cannot cancel order that is already preparing or completed.');
+    // 1. Fetch order details
+    const order = await this.prisma.order.findUnique({ where: { id }, include: { items: true } });
+    if (!order) throw new NotFoundException('Order not found');
 
-      // Stripe Refund
-      if (order.paymentMethod === 'CARD' && order.stripePaymentId && order.status === 'PENDING') {
-        try { await this.stripe.refunds.create({ payment_intent: order.stripePaymentId }); } 
-        catch (err: any) { throw new BadRequestException("Stripe refund failed. Refund manually."); }
-      }
+    // 2. Perform ATOMIC database transaction (Refund Inventory & Cancel)
+    await this.prisma.$transaction(async (tx) => {
+      const result = await tx.order.updateMany({
+        where: { id, status: { in: ['PENDING', 'UNPAID'] } },
+        data: { status: 'CANCELLED' }
+      });
+      
+      if (result.count === 0) throw new ConflictException('Order has already started and cannot be cancelled.');
 
-      // Refund Inventory Atomically
       for (const item of order.items) {
         const menuItem = await tx.menuItem.findFirst({ where: { name: item.name } });
         if (menuItem && menuItem.inventoryItemId && menuItem.inventoryDeduction) {
@@ -157,13 +166,23 @@ export class OrdersService {
           });
         }
       }
-
-      return tx.order.update({ where: { id }, data: { status: 'CANCELLED' } });
     });
+
+    // 3. SECURITY FIX: Process Stripe Refund OUTSIDE the DB transaction!
+    if (order.paymentMethod === 'CARD' && order.stripePaymentId && order.status === 'PENDING') {
+      try {
+        await this.stripe.refunds.create({ payment_intent: order.stripePaymentId });
+      } catch (err: any) {
+        console.error("Stripe Refund Failed:", err.message);
+        // We log it, but we don't crash, because the DB cancel already succeeded!
+      }
+    }
+
+    return { success: true };
   }
 
-  async cancelUnpaidOrder(orderNumber: string) {
-    const order = await this.prisma.order.findUnique({ where: { orderNumber } });
+  async cancelUnpaidOrder(id: string) {
+    const order = await this.prisma.order.findUnique({ where: { id } });
     if (!order || order.status !== 'UNPAID') return { success: false };
     await this.cancelOrder(order.id);
     return { success: true };
@@ -172,11 +191,18 @@ export class OrdersService {
   // --- STRIPE ---
   async createStripeCheckout(orderId: string) {
     const order = await this.prisma.order.findUnique({ where: { id: orderId }, include: { items: true } });
-    if (!order || order.status !== 'UNPAID' || order.paymentMethod !== 'CARD') throw new ConflictException('Invalid order for Stripe checkout.');
+    if (!order || order.status !== 'UNPAID' || order.paymentMethod !== 'CARD') {
+      throw new ConflictException('Invalid order for Stripe checkout.');
+    }
+
+    // SECURITY FIX: If they already generated a URL, return it! Don't create duplicates!
+    if (order.stripeSessionUrl) {
+      return { url: order.stripeSessionUrl };
+    }
 
     const lineItems = order.items.map((item) => {
       const unitAmount = Math.round((order.totalAmount / order.items.reduce((sum, i) => sum + i.quantity, 0)) * 100); 
-      return { price_data: { currency: 'ron', product_data: { name: item.name, description: item.notes || 'No notes' }, unit_amount: unitAmount }, quantity: item.quantity };
+      return { price_data: { currency: 'ron', product_data: { name: item.name }, unit_amount: unitAmount }, quantity: item.quantity };
     });
 
     const redirectUrl = process.env.CUSTOMER_URL || 'http://localhost:3000';
@@ -187,6 +213,12 @@ export class OrdersService {
       metadata: { orderId: order.id },
       success_url: `${redirectUrl}?success=true`,
       cancel_url: `${redirectUrl}?canceled=true`,
+    });
+
+    // Save the URL so they can't generate it again!
+    await this.prisma.order.update({
+      where: { id: orderId },
+      data: { stripeSessionUrl: session.url }
     });
 
     return { url: session.url };

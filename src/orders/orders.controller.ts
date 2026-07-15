@@ -16,16 +16,16 @@ export class OrdersController {
     return this.ordersService.create(createOrderDto);
   }
 
-  @Public()
-  @Get('status/:orderNumber')
-  getStatus(@Param('orderNumber') orderNumber: string) {
-    return this.ordersService.getStatusByOrderNumber(orderNumber);
+  @Public() 
+  @Get('status/:id')
+  getStatus(@Param('id') id: string) {
+    return this.ordersService.getStatusById(id);
   }
 
-  @Public()
-  @Patch('cancel-unpaid/:orderNumber')
-  cancelUnpaidOrder(@Param('orderNumber') orderNumber: string) {
-    return this.ordersService.cancelUnpaidOrder(orderNumber);
+  @Public() 
+  @Patch(':id/cancel-unpaid')
+  cancelUnpaidOrder(@Param('id') id: string) {
+    return this.ordersService.cancelUnpaidOrder(id);
   }
 
   @Public()

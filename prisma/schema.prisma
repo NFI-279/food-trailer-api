@@ -39,6 +39,7 @@ model Order {
   paymentMethod String      @default("CASH")   // "CASH" or "CARD"
 
   stripePaymentId  String?
+  stripeSessionUrl String? 
 
 
   items       OrderItem[]
