@@ -19,7 +19,7 @@ import { RolesGuard } from './auth/roles.guard';
     // 2. Configure the Rate Limiter (Limit: 10 requests per 60000ms/1 minute)
     ThrottlerModule.forRoot([{
       ttl: 60000, 
-      limit: 10,
+      limit: 1000,
     }]),
     PrismaModule,
     MenuModule,
