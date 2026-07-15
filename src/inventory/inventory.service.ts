@@ -37,4 +37,21 @@ export class InventoryService {
   async remove(id: string) {
     return this.prisma.inventoryItem.delete({ where: { id } });
   }
+
+  async adjustStock(id: string, delta: number) {
+    const item = await this.prisma.inventoryItem.findUnique({ where: { id } });
+    if (!item) throw new NotFoundException('Item not found');
+
+    // Prevent stock from going negative during manual adjustments!
+    if (item.currentStock + delta < 0) {
+      throw new BadRequestException('Cannot reduce stock below zero.');
+    }
+
+    return this.prisma.inventoryItem.update({
+      where: { id },
+      data: {
+        currentStock: { increment: delta } // Atomic database transaction!
+      },
+    });
+  }
 }
