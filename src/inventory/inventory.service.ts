@@ -1,6 +1,6 @@
 // src/inventory/inventory.service.ts
 import { Injectable, NotFoundException, BadRequestException  } from '@nestjs/common';
-import { CreateInventoryDto } from './dto/create-inventory.dto';
+import { CreateInventoryDto, UpdateInventoryDto } from './dto/create-inventory.dto';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -22,7 +22,7 @@ export class InventoryService {
   }
 
   // 3. Update an ingredient (used for both quick +/- stock changes AND the edit form)
-  async update(id: string, updateData: Partial<CreateInventoryDto>) {
+  async update(id: string, updateData: UpdateInventoryDto) {
     const item = await this.prisma.inventoryItem.findUnique({ where: { id } });
     if (!item) {
       throw new NotFoundException(`Inventory item with ID ${id} not found`);
