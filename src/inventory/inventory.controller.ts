@@ -1,7 +1,7 @@
 // src/inventory/inventory.controller.ts
 import { Controller, Get, Post, Body, Patch, Param } from '@nestjs/common';
 import { InventoryService } from './inventory.service';
-import { CreateInventoryDto } from './dto/create-inventory.dto';
+import { CreateInventoryDto, UpdateInventoryDto } from './dto/create-inventory.dto';
 import { Delete } from '@nestjs/common';
 import { Roles } from '../auth/roles.decorator'; 
 
@@ -22,7 +22,7 @@ export class InventoryController {
 
    @Roles('ADMIN')
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateData: Partial<CreateInventoryDto>) {
+  update(@Param('id') id: string, @Body() updateData: UpdateInventoryDto) {
     return this.inventoryService.update(id, updateData);
   }
 
