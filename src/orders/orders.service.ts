@@ -140,31 +140,22 @@ export class OrdersService {
     return { success: true };
   }
 
-  async cancelOrder(id: string) {
-    // SECURITY FIX: Read the order items INSIDE the transaction to guarantee data integrity!
-    let paymentMethod = '';
-    let stripePaymentId: string | null = null;
-    let status = '';
-
-    await this.prisma.$transaction(async (tx) => {
+ async cancelOrder(id: string) {
+    // SECURITY FIX: Perform the DB transaction and capture the EXACT final state!
+    const finalOrderState = await this.prisma.$transaction(async (tx) => {
       const order = await tx.order.findUnique({ where: { id }, include: { items: true } });
       if (!order) throw new NotFoundException('Order not found');
       
-      paymentMethod = order.paymentMethod;
-      stripePaymentId = order.stripePaymentId;
-      status = order.status;
-
       if (order.status !== 'PENDING' && order.status !== 'UNPAID') {
         throw new ConflictException('Cannot cancel order that is already preparing or completed.');
       }
 
-      const result = await tx.order.updateMany({
-        where: { id, status: { in: ['PENDING', 'UNPAID'] } },
+      const updatedOrder = await tx.order.update({
+        where: { id },
         data: { status: 'CANCELLED' }
       });
-      
-      if (result.count === 0) throw new ConflictException('Race condition detected. Order cancellation aborted.');
 
+      // Refund Inventory
       for (const item of order.items) {
         const menuItem = await tx.menuItem.findFirst({ where: { name: item.name } });
         if (menuItem && menuItem.inventoryItemId && menuItem.inventoryDeduction) {
@@ -174,12 +165,14 @@ export class OrdersService {
           });
         }
       }
+
+      return { ...updatedOrder, items: order.items }; // Return the fresh data!
     });
 
-    // Process Stripe Refund OUTSIDE the DB transaction!
-    if (paymentMethod === 'CARD' && stripePaymentId && status === 'PENDING') {
+    // SECURITY FIX: If the fresh data shows a Stripe ID, refund it instantly!
+    if (finalOrderState.paymentMethod === 'CARD' && finalOrderState.stripePaymentId) {
       try {
-        await this.stripe.refunds.create({ payment_intent: stripePaymentId });
+        await this.stripe.refunds.create({ payment_intent: finalOrderState.stripePaymentId });
         this.logger.log(`Stripe refund successful for order ${id}`);
       } catch (err: any) {
         this.logger.error(`Stripe Refund Failed for order ${id}: ${err.message}`);
@@ -248,20 +241,36 @@ export class OrdersService {
 
       if (orderId) {
         try {
+          // Attempt to update the order only if it's still UNPAID
           const result = await this.prisma.order.updateMany({
             where: { id: orderId, status: 'UNPAID' },
             data: { status: 'PENDING', stripePaymentId: paymentIntentId },
           });
 
-          // SECURITY FIX: Alert us if the payment was successful, but the order couldn't be updated!
           if (result.count === 0) {
-            this.logger.error(`[CRITICAL] Stripe payment succeeded for order ${orderId}, but order was NOT UNPAID in the database! Needs manual reconciliation.`);
+            // SECURITY FIX: The order wasn't UNPAID! Let's find out why.
+            const existingOrder = await this.prisma.order.findUnique({ where: { id: orderId } });
+            
+            if (existingOrder?.status === 'CANCELLED') {
+              // The customer paid, but the order was cancelled in the exact same millisecond!
+              // Issue an immediate automatic refund!
+              this.logger.warn(`Order ${orderId} was paid but is already CANCELLED. Issuing automatic refund!`);
+              await this.stripe.refunds.create({ payment_intent: paymentIntentId });
+              
+              // Save the payment ID so we have a record of it being refunded
+              await this.prisma.order.update({
+                where: { id: orderId },
+                data: { stripePaymentId: paymentIntentId }
+              });
+            } else {
+              this.logger.error(`Stripe payment succeeded for order ${orderId}, but status was ${existingOrder?.status}.`);
+            }
           } else {
             this.logger.log(`Order ${orderId} successfully marked as PENDING from Stripe Webhook.`);
           }
         } catch (dbError: any) {
           this.logger.error(`Database error while processing webhook for order ${orderId}: ${dbError.message}`);
-          throw new Error('Database error during webhook processing'); // Forces Stripe to retry later!
+          throw new Error('Database error during webhook processing'); 
         }
       }
     }
