@@ -143,7 +143,7 @@ export class OrdersService {
   async cancelOrder(id: string) {
     // SECURITY FIX: Read the order items INSIDE the transaction to guarantee data integrity!
     let paymentMethod = '';
-    let stripePaymentId = null;
+    let stripePaymentId: string | null = null;
     let status = '';
 
     await this.prisma.$transaction(async (tx) => {
