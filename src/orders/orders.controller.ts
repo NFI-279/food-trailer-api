@@ -18,20 +18,20 @@ export class OrdersController {
 
   @Public() 
   @Get('status/:id')
-  getStatus(@Param('id') id: string) {
-    return this.ordersService.getStatusById(id);
+  getStatus(@Param('id') id: string, @Headers('x-order-token') token?: string) {
+    return this.ordersService.getStatusById(id, token);
   }
 
   @Public() 
   @Patch(':id/cancel-unpaid')
-  cancelUnpaidOrder(@Param('id') id: string) {
-    return this.ordersService.cancelUnpaidOrder(id);
+  cancelUnpaidOrder(@Param('id') id: string, @Headers('x-order-token') token?: string) {
+    return this.ordersService.cancelUnpaidOrder(id, token);
   }
 
   @Public()
   @Post(':id/checkout')
-  createCheckoutSession(@Param('id') id: string) {
-    return this.ordersService.createStripeCheckout(id);
+  createCheckoutSession(@Param('id') id: string, @Headers('x-order-token') token?: string) {
+    return this.ordersService.createStripeCheckout(id, token);
   }
 
   @Public()
