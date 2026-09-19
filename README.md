@@ -57,6 +57,33 @@ $ npm run test:e2e
 $ npm run test:cov
 ```
 
+## Local three-repository demo
+
+From this API worktree, run the parameterized Windows launcher:
+
+```powershell
+.\scripts\start-local.ps1 -CustomerPath ..\food-trailer-customer -AdminPath ..\food-trailer-admin
+```
+
+The script checks Docker Desktop and Node/npm, reuses or creates the disposable
+`food-trailer-postgres` PostgreSQL 16 container, runs `npm ci` in each repository,
+deploys Prisma migrations, seeds an admin account, menu item, and settings, and
+opens persistent PowerShell windows for the API (`3001`), customer app (`3000`),
+and admin app (`3002`). It generates and prints a local-only admin password and
+JWT secret unless they are supplied with `-AdminPassword` and `-JwtSecret`.
+
+Use `-CustomerPath`, `-AdminPath`, `-CustomerCommand`, and `-AdminCommand` for
+different checkouts or frontend start commands. Use `-SkipUiInstall` when the
+frontend dependencies are already installed. Stop the app windows with
+`Ctrl+C`; stop or remove the database with:
+
+```powershell
+docker stop food-trailer-postgres
+docker rm food-trailer-postgres
+```
+
+The generated demo credentials and secrets are intended only for local use.
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.

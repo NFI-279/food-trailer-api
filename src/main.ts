@@ -2,8 +2,10 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { validateSecurityConfiguration } from './config/security.config';
 
 async function bootstrap() {
+  validateSecurityConfiguration();
   const app = await NestFactory.create(AppModule, { rawBody: true });
 
   const allowedOrigins = [
@@ -20,7 +22,14 @@ async function bootstrap() {
     ? process.env.FRONTEND_URL
         .split(',')
         .map((url) => url.trim())
-        .filter(Boolean)
+        .filter((url) => {
+          try {
+            const parsed = new URL(url);
+            return parsed.protocol === 'https:' || parsed.hostname === 'localhost';
+          } catch {
+            return false;
+          }
+        })
     : [];
 
   const corsOrigins = [...new Set([...allowedOrigins, ...envOrigins])];

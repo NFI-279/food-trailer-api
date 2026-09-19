@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { IS_PUBLIC_KEY } from './public.decorator';
+import { getJwtSecret } from '../config/security.config';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -29,7 +30,7 @@ export class JwtAuthGuard implements CanActivate {
     // 3. Verify the token is real and hasn't expired
     try {
       const payload = await this.jwtService.verifyAsync(token, {
-        secret: process.env.JWT_SECRET || 'super-secret-development-key',
+        secret: getJwtSecret(),
       });
       // Attach the payload to the request object so our controllers know who is logged in
       request['user'] = payload;

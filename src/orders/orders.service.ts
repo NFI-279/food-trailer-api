@@ -1,8 +1,9 @@
 // [Backend] src/orders/orders.service.ts
-import { Injectable, NotFoundException, BadRequestException, ConflictException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException, Logger, UnauthorizedException } from '@nestjs/common';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import Stripe from 'stripe';
+import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 
 @Injectable()
 export class OrdersService {
@@ -14,7 +15,10 @@ export class OrdersService {
   constructor(private prisma: PrismaService) {}
 
   async create(createOrderDto: CreateOrderDto) {
-    return this.prisma.$transaction(async (tx) => {
+    const customerAccessToken = randomBytes(32).toString('hex');
+    const customerAccessTokenHash = this.hashCustomerAccessToken(customerAccessToken);
+
+    const order = await this.prisma.$transaction(async (tx) => {
       const settings = await tx.settings.findUnique({ where: { id: 'GLOBAL' } });
       if (settings) {
         if (!settings.isAcceptingOrders) throw new BadRequestException("The trailer is currently closed.");
@@ -80,6 +84,7 @@ export class OrdersService {
           totalAmount: secureTotalAmount,
           status: 'UNPAID',
           paymentMethod: createOrderDto.paymentMethod,
+          customerAccessTokenHash,
           items: {
             create: createOrderDto.items.map(item => ({
               name: item.name, quantity: item.quantity,
@@ -89,6 +94,9 @@ export class OrdersService {
         include: { items: true },
       });
     });
+
+    const { customerAccessTokenHash: _, ...safeOrder } = order;
+    return { ...safeOrder, customerAccessToken };
   }
 
   async findActive() { return this.prisma.order.findMany({ where: { status: { in: ['PENDING', 'PREPARING'] } }, include: { items: true }, orderBy: { createdAt: 'asc' } }); }
@@ -98,8 +106,13 @@ export class OrdersService {
     return this.prisma.order.findMany({ where: { status: 'COMPLETED', updatedAt: { gte: startOfDay } }, include: { items: true }, orderBy: { updatedAt: 'desc' } });
   }
 
-  async getStatusById(id: string) {
-    const order = await this.prisma.order.findUnique({ where: { id }, select: { id: true, orderNumber: true, status: true, totalAmount: true, updatedAt: true } });
+  async getStatusById(id: string, customerAccessToken?: string) {
+    await this.assertCustomerAccess(id, customerAccessToken);
+
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      select: { id: true, orderNumber: true, status: true, totalAmount: true, updatedAt: true },
+    });
     if (!order) throw new NotFoundException('Order not found');
     return order;
   }
@@ -182,7 +195,8 @@ export class OrdersService {
     return { success: true };
   }
 
-  async cancelUnpaidOrder(id: string) {
+  async cancelUnpaidOrder(id: string, customerAccessToken?: string) {
+    await this.assertCustomerAccess(id, customerAccessToken);
     const order = await this.prisma.order.findUnique({ where: { id } });
     if (!order || order.status !== 'UNPAID') return { success: false };
     await this.cancelOrder(order.id);
@@ -190,7 +204,8 @@ export class OrdersService {
   }
 
   // --- STRIPE ---
-  async createStripeCheckout(orderId: string) {
+  async createStripeCheckout(orderId: string, customerAccessToken?: string) {
+    await this.assertCustomerAccess(orderId, customerAccessToken);
     const order = await this.prisma.order.findUnique({ where: { id: orderId }, include: { items: true } });
     if (!order || order.status !== 'UNPAID' || order.paymentMethod !== 'CARD') {
       throw new ConflictException('Invalid order for Stripe checkout.');
@@ -275,5 +290,30 @@ export class OrdersService {
       }
     }
     return { received: true };
+  }
+
+  private hashCustomerAccessToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
+  private async assertCustomerAccess(id: string, token?: string): Promise<void> {
+    if (!token || !/^[a-f0-9]{64}$/i.test(token)) {
+      throw new UnauthorizedException('A valid order access token is required.');
+    }
+
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      select: { customerAccessTokenHash: true },
+    });
+    if (!order?.customerAccessTokenHash) throw new NotFoundException('Order not found');
+
+    const providedHash = Buffer.from(this.hashCustomerAccessToken(token), 'hex');
+    const storedHash = Buffer.from(order.customerAccessTokenHash, 'hex');
+    if (
+      providedHash.length !== storedHash.length ||
+      !timingSafeEqual(providedHash, storedHash)
+    ) {
+      throw new UnauthorizedException('A valid order access token is required.');
+    }
   }
 }
